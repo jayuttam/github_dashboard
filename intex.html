@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GitHub Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/github-calendar@latest/dist/github-calendar.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/github-calendar@latest/dist/github-calendar-responsive.css"/>
+  <style>
+    :root {
+      --bg: #f4f4f4;
+      --text: #333;
+      --card: white;
+    }
+    [data-theme="dark"] {
+      --bg: #1e1e2f;
+      --text: #f1f1f1;
+      --card: #2c2c3e;
+    }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: background 0.3s, color 0.3s;
+    }
+    .container {
+      max-width: 800px;
+      margin-top: 2rem;
+      background: var(--card);
+      padding: 2rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      width: 90%;
+    }
+    input, button {
+      font-size: 1rem;
+      border-radius: 5px;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 1rem;
+      border: 1px solid #ccc;
+    }
+    button {
+      padding: 10px 20px;
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover {
+      opacity: 0.9;
+    }
+    .profile {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      align-items: center;
+      animation: fadeIn 1s ease-in-out;
+    }
+    .profile img {
+      width: 100px;
+      border-radius: 50%;
+      transition: transform 0.3s;
+    }
+    .profile img:hover {
+      transform: scale(1.1) rotate(2deg);
+    }
+    .repos, .languages {
+      margin-top: 2rem;
+    }
+    .repo {
+      background: #e8e8e8;
+      margin-bottom: 0.5rem;
+      padding: 10px;
+      border-radius: 5px;
+      transition: transform 0.2s;
+    }
+    .repo:hover {
+      transform: translateY(-3px);
+    }
+    #loader {
+      display: none;
+      text-align: center;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 GitHub Dashboard</h1>
+    <input type="text" id="username" placeholder="Enter GitHub username..." />
+    <div style="margin-bottom:1rem">
+      <button onclick="loadGitHubData()">Search</button>
+      <button onclick="toggleTheme()">🌙 Toggle Dark Mode</button>
+    </div>
+    <div id="loader">⏳ Loading...</div>
+    <div class="profile" id="profile"></div>
+    <div class="repos" id="repos"></div>
+    <div class="languages">
+      <canvas id="langChart"></canvas>
+    </div>
+    <div class="calendar">
+      <h3>📆 Contributions</h3>
+      <div class="calendar" id="github-calendar"></div>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', currentTheme === 'dark' ? 'light' : 'dark');
+    }
+
+    async function loadGitHubData() {
+      const username = document.getElementById('username').value;
+      const profileEl = document.getElementById('profile');
+      const reposEl = document.getElementById('repos');
+      const loader = document.getElementById('loader');
+      const langChartEl = document.getElementById('langChart');
+      profileEl.innerHTML = reposEl.innerHTML = '';
+      loader.style.display = 'block';
+
+      try {
+        const userRes = await fetch(`https://api.github.com/users/${username}`);
+        if (!userRes.ok) throw new Error('User not found');
+        const user = await userRes.json();
+
+        const gif = "https://media.giphy.com/media/xT9IgzoKnwFNmISR8I/giphy.gif";
+
+        profileEl.innerHTML = `
+          <img src="${user.avatar_url}" alt="${user.login}" />
+          <div>
+            <h2>${user.name || user.login}</h2>
+            <p>${user.bio || ''}</p>
+            <p>👥 ${user.followers} followers · ${user.following} following</p>
+            <p>📍 ${user.location || 'No location'}</p>
+            <img src="${gif}" width="100" alt="fun gif" style="margin-top: 10px; border-radius:10px;"/>
+          </div>
+        `;
+
+        const reposRes = await fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=5`);
+        const repos = await reposRes.json();
+
+        const langData = {};
+        repos.forEach(repo => {
+          reposEl.innerHTML += `
+            <div class="repo">
+              <strong>${repo.name}</strong> ⭐ ${repo.stargazers_count} · 🍴 ${repo.forks_count}
+            </div>
+          `;
+          if (repo.language) {
+            langData[repo.language] = (langData[repo.language] || 0) + 1;
+          }
+        });
+
+        new Chart(langChartEl.getContext('2d'), {
+          type: 'pie',
+          data: {
+            labels: Object.keys(langData),
+            datasets: [{
+              data: Object.values(langData),
+              backgroundColor: [
+                '#007bff', '#28a745', '#ffc107', '#dc3545', '#6610f2'
+              ],
+            }]
+          }
+        });
+
+        GitHubCalendar("#github-calendar", username);
+
+      } catch (error) {
+        alert('User not found or API error!');
+        console.error(error);
+      } finally {
+        loader.style.display = 'none';
+      }
+    }
+  </script>
+</body>
+</html>
